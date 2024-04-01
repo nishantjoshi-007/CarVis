@@ -89,3 +89,4 @@ def update_model_dropdown(selected_manufacturers, search_value):
 # Run the app
 if __name__ == '__main__':
     app.run_server(debug=True)
+    server = app.server
