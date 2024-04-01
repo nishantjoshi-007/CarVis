@@ -9,6 +9,7 @@ df = pd.read_csv('./data/car_price_prediction.csv')
 
 # Initialize the Dash app
 app = Dash(__name__)
+server = app.server
 
 # Extract necessary data for the layout
 manufacturers = df['Manufacturer'].unique()
@@ -89,4 +90,3 @@ def update_model_dropdown(selected_manufacturers, search_value):
 # Run the app
 if __name__ == '__main__':
     app.run_server(debug=True)
-    server = app.server
