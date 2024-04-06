@@ -76,7 +76,6 @@ def create_layout(manufacturers, min_year, max_year, fuel_types, all_models, mul
         )
     ])
     
-    
 '''
         html.Div(children=[
             html.Label('Select Production Year Range:'),
