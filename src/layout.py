@@ -5,7 +5,7 @@ def create_layout(manufacturers, min_year, max_year, fuel_types, all_models, mul
     graph_options = ['Scatter Plot', 'Pie Chart', 'Bar Chart', 'Box Plot', 'Histogram']
 
     return html.Div(children=[
-        html.H1('Car Price Prediction Dashboard',),
+        html.H1('CarVis: A Dashboard for Car Decisions-Making',),
 
         html.Div(children=[
             html.Div(children=[
