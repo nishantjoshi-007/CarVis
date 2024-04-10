@@ -126,4 +126,4 @@ def update_histogram(selected_manufacturers, selected_years, selected_models, se
 
 # Run the app
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(debug=False)
