@@ -45,7 +45,7 @@ pip install dash-bootstrap-components
 
 Clone the project
 ```bash
-https://github.com/nishantjoshi-007/CarVis
+git clone https://github.com/nishantjoshi-007/CarVis
 ```
 Go to project directory
 ```bash
