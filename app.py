@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, Input, Output, callback
+from dash import dcc, Input, Output, callback
 import pandas as pd
 import plotly.express as px
 from src.layout import create_layout
@@ -36,39 +36,29 @@ def filter_dataframe(selected_manufacturers, selected_years, selected_models, se
         filtered_df = filtered_df[filtered_df['Model'].isin(selected_models)]
 
     if selected_fuel_types:
-        filtered_df = filtered_df[filtered_df['Fuel type'].isin(selected_fuel_types)]
-        
-        # Convert 'Mileage' to numeric if necessary
+        filtered_df = filtered_df[filtered_df['Fuel type'].isin(selected_fuel_types)]        
+    
     filtered_df['Mileage'] = filtered_df['Mileage'].str.replace(' km', '').astype(int)
-
-    # Calculate Q1, Q3, and IQR
     Q1 = filtered_df['Mileage'].quantile(0.25)
     Q3 = filtered_df['Mileage'].quantile(0.75)
     IQR = Q3 - Q1
-
-    # Define bounds for outliers
     lower_bound = Q1 - 2 * IQR
     upper_bound = Q3 + 2 * IQR
-    
     filtered_df = filtered_df[(filtered_df['Mileage'] >= lower_bound) & (filtered_df['Mileage'] <= upper_bound)]
-    
     return filtered_df
 
-# Callback for Scatter Plot
 @app.callback(
-    Output('scatter-plot', 'figure'),  # Update this to 'scatter-plot' or other new graph component IDs
+    Output('scatter-plot', 'figure'),
     [Input('manufacturer-dropdown', 'value'),
      Input('prod-year-slider', 'value'),
      Input('model-name-dropdown', 'value'),
      Input('fuel-type-checklist', 'value')]
 )
-
 def update_scatter_plot(selected_manufacturers, selected_years, selected_models, selected_fuel_types):
     filtered_df = filter_dataframe(selected_manufacturers, selected_years, selected_models, selected_fuel_types)
     fig = px.scatter(filtered_df, x='Mileage', y='Price', title='Car Price Distribution by Mileage')
     return fig
 
-# Callback for Pie Chart
 @app.callback(
     Output('pie-chart', 'figure'),
     [Input('manufacturer-dropdown', 'value'),
@@ -82,7 +72,6 @@ def update_pie_chart(selected_manufacturers, selected_years, selected_models, se
     fig.update_layout(height=600, width=800)
     return fig
 
-# Callback for Bar Chart
 @app.callback(
     Output('bar-chart', 'figure'),
     [Input('manufacturer-dropdown', 'value'),
@@ -92,13 +81,10 @@ def update_pie_chart(selected_manufacturers, selected_years, selected_models, se
 )
 def update_bar_chart(selected_manufacturers, selected_years, selected_models, selected_fuel_types):
     filtered_df = filter_dataframe(selected_manufacturers, selected_years, selected_models, selected_fuel_types)
-    # Group by 'Category' and calculate mean 'Price'
     avg_price_per_category = filtered_df.groupby('Category')['Price'].mean().reset_index()
-    # Plot the average price by category
     fig = px.bar(avg_price_per_category, x='Category', y='Price', color='Category', title='Average Price by Vehicle Category')
     return fig
 
-# Callback for box plot
 @app.callback(
     Output('box-plot', 'figure'),
     [Input('manufacturer-dropdown', 'value'),
@@ -111,7 +97,6 @@ def update_box_plot(selected_manufacturers, selected_years, selected_models, sel
     fig = px.box(filtered_df, x='Manufacturer', y='Price', title='Price Distribution by Manufacturer')
     return fig
 
-# Callback for histogram
 @app.callback(
     Output('histogram', 'figure'),
     [Input('manufacturer-dropdown', 'value'),
