@@ -3,7 +3,7 @@
 
 <p>This project introduces a visualization tool aimed at transforming the car buying and selling process by offering price forecasts and valuable market analyses. With a dataset containing over 19,000 entries and 18 different variables such as car make, model, year of manufacture, and safety features the tool is customized to cater to the needs of users including buyers, car enthusiasts, and dealers. Featuring a user interface the dashboard incorporates elements like Dropdowns, Sliders, Checklists, and Input fields to help users navigate through complex data effortlessly. The main goal is to equip users with insights that support informed decision-making in the automotive sector.</p>
 
-<h4> <a href=https://carvis-61d9f521d940.herokuapp.com/>View Demo</a> <span> · </span> <a href="https://github.com/nishantjoshi-007/Carvis/blob/master/README.md"> Documentation </a> <span> · </span> <a href="https://github.com/nishantjoshi-007/Carvis/issues"> Report Bug </a> <span> · </span> <a href="https://github.com/nishantjoshi-007/Carvis/issues"> Request Feature </a> </h4>
+<h4> <a href=https://carvis-61d9f521d940.herokuapp.com/>View Demo</a> <span> · </span> <a href="https://github.com/nishantjoshi-007/CarVis/blob/main/Project_Report.pdf"> Documentation </a> <span> · </span> <a href="https://github.com/nishantjoshi-007/Carvis/issues"> Report Bug </a> <span> · </span> <a href="https://github.com/nishantjoshi-007/Carvis/issues"> Request Feature </a> </h4>
 
 
 </div>
