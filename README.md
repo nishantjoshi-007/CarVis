@@ -1,3 +1,4 @@
+# :star2: About the Project
 <div align='center'>
 
 <p>This project introduces a visualization tool aimed at transforming the car buying and selling process by offering price forecasts and valuable market analyses. With a dataset containing over 19,000 entries and 18 different variables such as car make, model, year of manufacture, and safety features the tool is customized to cater to the needs of users including buyers, car enthusiasts, and dealers. Featuring a user interface the dashboard incorporates elements like Dropdowns, Sliders, Checklists, and Input fields to help users navigate through complex data effortlessly. The main goal is to equip users with insights that support informed decision-making in the automotive sector.</p>
@@ -9,12 +10,9 @@
 
 # :notebook_with_decorative_cover: Table of Contents
 
-- [About the Project](#star2-about-the-project)
+- [Getting Started](#toolbox-getting-started)
 - [License](#warning-license)
-
-
-## :star2: About the Project
-<details> <summary>Database</summary> <ul>
+- <details> <summary>Database</summary> <ul>
 <li><a href="https://www.kaggle.com/datasets/deepcontractor/car-price-prediction-challenge">Car Prediction Database</a></li>
 </ul> </details>
 
