@@ -44,9 +44,12 @@ pip install dash-bootstrap-components
 ### :running: Run Locally
 
 Clone the project
-
 ```bash
 https://github.com/nishantjoshi-007/CarVis
+```
+Go to project directory
+```bash
+cd CarVis
 ```
 To run this project
 ```bash
