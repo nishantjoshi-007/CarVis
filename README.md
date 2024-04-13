@@ -12,9 +12,7 @@
 
 - [Getting Started](#toolbox-getting-started)
 - [License](#warning-license)
-<details> <summary>Database</summary> <ul>
-<li><a href="https://www.kaggle.com/datasets/deepcontractor/car-price-prediction-challenge">Car Prediction Database</a></li>
-</ul> </details>
+- <a href="https://www.kaggle.com/datasets/deepcontractor/car-price-prediction-challenge">Car Prediction Database</a>
 
 ## :toolbox: Getting Started
 
