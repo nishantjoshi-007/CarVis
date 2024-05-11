@@ -18,6 +18,15 @@
 - Install VS code to run locally<a href="https://code.visualstudio.com/Download"> Here</a>
 - Install Python in your computer<a href="https://www.python.org/downloads/"> Here</a>
 
+### :gear: Installation
+In VS code, First
+- ctrl+P For Windows
+- cmd+P For MacOs
+
+Install Python Extension
+```bash
+ext install python
+```
 
 ### :running: Run Locally
 Clone the project
