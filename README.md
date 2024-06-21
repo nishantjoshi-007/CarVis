@@ -37,9 +37,13 @@ Go to project directory
 ```bash
 cd CarVis
 ```
-Install necessary libraries
+Install the Python package for virtual environment:
 ```bash
-pip install -r requirements.txt
+pip install pipenv
+```
+- Install the required Python packages using pipenv:
+```bash
+pipenv install
 ```
 To run this project
 ```bash
