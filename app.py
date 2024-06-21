@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, Input, Output, callback
+from dash import Input, Output, callback
 import pandas as pd
 import plotly.express as px
 from src.layout import create_layout
