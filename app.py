@@ -11,6 +11,9 @@ df = pd.read_csv('./data/car_price_prediction.csv')
 app = dash.Dash(__name__)
 server = app.server
 
+app.title = 'CarVis'
+app._favicon = ("icon.ico")
+
 # Extract necessary data for the layout
 manufacturers = df['Manufacturer'].unique()
 min_year = df['Prod. year'].min()
