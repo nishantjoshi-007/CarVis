@@ -67,6 +67,12 @@ def create_layout(manufacturers, min_year, max_year, fuel_types, all_models, mul
             )
         ], style={'width': '100%', 'display': 'flex', 'justify-content': 'center'}),
 
+        # Predicted vs Actual Price
+        html.Div(
+            dcc.Graph(id='prediction-plot'),
+            style={'width': '70%', 'margin': 'auto', 'display': 'block'}
+        ),
+
         # Pie Chart
         html.Div(
             dcc.Graph(id='pie-chart'),
