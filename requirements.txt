@@ -2,16 +2,7 @@ dash
 pandas
 plotly
 gunicorn
-
-# Database layer. Optional at runtime: if these are missing, or DATABASE_URL is
-# unset, the dashboard falls back to reading the CSV (see decision.md D6).
-#   psycopg[binary] -- psycopg3, the actively maintained driver. The [binary]
-#                      extra ships a prebuilt libpq so no compiler is needed.
-#   psycopg_pool    -- connection pooling for the five concurrent callbacks.
 psycopg[binary]
 psycopg_pool
-
-# Price forecasting (ml/price_model.py). The dashboard degrades gracefully
-# if the trained model file is absent.
 scikit-learn
 joblib
