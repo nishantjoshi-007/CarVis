@@ -1,30 +1,14 @@
-"""
-CarVis — measure what the indexes actually buy.
-
-    python benchmark.py
-
-For each representative dashboard query this drops the secondary indexes, runs
-EXPLAIN ANALYZE, rebuilds them, and runs it again -- then prints the plan the
-planner chose and the time it took, in both states.
-
-WHY IT EXISTS
--------------
-"I added indexes and it got faster" is a claim. This produces the evidence, on
-this data. It also, deliberately, includes a query that indexes do NOT help --
-because the honest finding is that an index only pays off when a filter is
-selective, and a benchmark that only shows wins is marketing.
-
-The PRIMARY KEY is never dropped: it is a correctness constraint, not a
-performance index.
-"""
+# Measure what the indexes actually buy:  python benchmark.py
+#
+# Drops the secondary indexes, runs EXPLAIN ANALYZE, rebuilds, runs again.
+# One query is included that indexes do NOT help -- a benchmark that only
+# reports wins is marketing. The PK is never dropped; it is a constraint. (D18)
 
 from __future__ import annotations
 
 import os
 import re
 import statistics
-import sys
-import time
 from pathlib import Path
 
 import psycopg
@@ -77,22 +61,22 @@ QUERIES: list[tuple[str, str, str]] = [
 
 
 def plan_of(cur, sql: str) -> tuple[str, float]:
-    """Run EXPLAIN ANALYZE and return (main scan node, execution ms)."""
+    # Returns (scan node on the fact table, execution ms)
     cur.execute("EXPLAIN (ANALYZE, TIMING ON) " + sql)
     lines = [r[0] for r in cur.fetchall()]
     text = "\n".join(lines)
 
-    # Report the scan on fact_car_listing specifically. A join plan contains a
-    # node per table, and the dimension scans are noise here -- the fact table
-    # is the one the indexes are about.
+    # A join plan has a node per table; the dimension scans are noise here
     node = r"(Seq Scan|Index Scan|Index Only Scan|Bitmap Heap Scan|Bitmap Index Scan)"
     scan = next(
         (m.group(1) for line in lines
          if "fact_car_listing" in line and (m := re.search(node, line))),
         next((m.group(1) for line in lines if (m := re.search(node, line))), "?"),
     )
-    ms = float(re.search(r"Execution Time: ([\d.]+) ms", text).group(1))
-    return scan, ms
+    timing = re.search(r"Execution Time: ([\d.]+) ms", text)
+    if timing is None:
+        raise RuntimeError("no Execution Time in EXPLAIN output; was ANALYZE omitted?")
+    return scan, float(timing.group(1))
 
 
 def measure(cur, sql: str) -> tuple[str, float]:
@@ -115,17 +99,16 @@ def main() -> int:
     dsn = os.environ.get("DATABASE_URL", DEFAULT_DSN)
     print(f"benchmarking against {dsn.rsplit('@', 1)[-1]}  (median of {RUNS} runs)\n")
 
-    with psycopg.connect(dsn, autocommit=True) as conn:
-        with conn.cursor() as cur:
-            try:
-                set_indexes(cur, present=False)
-                without = {name: measure(cur, sql) for name, _, sql in QUERIES}
+    with psycopg.connect(dsn, autocommit=True) as conn, conn.cursor() as cur:
+        try:
+            set_indexes(cur, present=False)
+            without = {name: measure(cur, sql) for name, _, sql in QUERIES}
 
-                set_indexes(cur, present=True)
-                with_ix = {name: measure(cur, sql) for name, _, sql in QUERIES}
-            finally:
-                # Always leave the database in its normal, indexed state.
-                set_indexes(cur, present=True)
+            set_indexes(cur, present=True)
+            with_ix = {name: measure(cur, sql) for name, _, sql in QUERIES}
+        finally:
+            # Always leave the database in its normal, indexed state.
+            set_indexes(cur, present=True)
 
     print(f"{'query':<44}{'no indexes':>22}{'with indexes':>24}{'change':>10}")
     print("-" * 100)
@@ -133,8 +116,9 @@ def main() -> int:
         b_plan, b_ms = without[name]
         a_plan, a_ms = with_ix[name]
         ratio = b_ms / a_ms if a_ms else 0
-        verdict = f"{ratio:.1f}x" if ratio >= 1.15 else ("same" if ratio > 0.85 else f"{ratio:.1f}x")
-        print(f"{name:<44}{b_plan + f' {b_ms:.2f}ms':>22}{a_plan + f' {a_ms:.2f}ms':>24}{verdict:>10}")
+        verdict = "same" if 0.85 < ratio < 1.15 else f"{ratio:.1f}x"
+        before, after = f"{b_plan} {b_ms:.2f}ms", f"{a_plan} {a_ms:.2f}ms"
+        print(f"{name:<44}{before:>22}{after:>24}{verdict:>10}")
         print(f"  {note}")
     print("\nRead the PLAN column, not just the times. An index helps when a filter")
     print("is selective; when most of the table matches, PostgreSQL falls back to a")

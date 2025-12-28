@@ -1,24 +1,9 @@
-"""
-CarVis ETL — loads the source CSV into the Postgres star schema.
-
-Run from the project root:
-
-    python -m etl.load                      # uses DATABASE_URL, else local default
-    DATABASE_URL=postgresql://... python -m etl.load
-
-What it does, in order:
-
-    1. EXTRACT   read data/car_price_prediction.csv
-    2. DEDUPE    drop exact duplicate rows (313 of them)
-    3. TRANSFORM apply etl/clean.py rules; collect a field-level audit trail
-    4. LOAD      populate dimensions, bulk-COPY the facts, THEN build indexes
-                 and refresh planner statistics
-    5. RECONCILE write etl_load_run + etl_quarantine, print a summary
-
-The reconciliation step is the point of the whole script. Anyone can assert
-"I cleaned the data"; the load log and the quarantine table let a reviewer
-check the claim -- rows in, rows out, and every single value we touched.
-"""
+# CarVis ETL: CSV -> clean -> Postgres. Run from the project root.
+#
+#   python -m etl.load
+#   DATABASE_URL=postgresql://... python -m etl.load
+#
+# extract -> dedupe -> transform -> load -> reconcile. Rationale: decision.md.
 
 from __future__ import annotations
 
@@ -27,6 +12,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import LiteralString, cast
 
 import psycopg
 
@@ -38,8 +24,8 @@ from etl.clean import (
     parse_levy,
     parse_mileage,
     parse_price,
-    parse_yes_no,
     parse_year,
+    parse_yes_no,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -68,15 +54,8 @@ def get_dsn() -> str:
 
 
 def read_and_dedupe(path: Path) -> tuple[list[dict], int]:
-    """Read the CSV, dropping rows that are byte-for-byte identical to one
-    already seen.
-
-    Deduping HERE, before load, keeps the database from ever seeing the
-    duplicates. The primary key on fact_car_listing.listing_id is the second
-    line of defence: if a future edit breaks this function, Postgres rejects
-    the duplicate instead of silently storing it. Process plus constraint --
-    the process can regress, the constraint cannot.
-    """
+    # 313 exact duplicates. The PK on listing_id is the backstop if this
+    # breaks: cleaning is a process and processes regress, a constraint cannot.
     with path.open(newline="", encoding="utf-8") as fh:
         rows = list(csv.DictReader(fh))
 
@@ -96,12 +75,8 @@ def read_and_dedupe(path: Path) -> tuple[list[dict], int]:
 
 
 def clean_row(row: dict) -> tuple[dict | None, list[Issue], str | None]:
-    """Apply every cleaning rule to one source row.
-
-    Returns (cleaned, issues, reject_reason). A non-None reject_reason means
-    the row is unusable and will not be loaded -- but its issues are still
-    recorded, so rejects are auditable too.
-    """
+    # Returns (cleaned, issues, reject_reason). A reject still reports its
+    # issues, so rejected rows stay auditable.
     issues: list[Issue] = []
     source_id = (row.get("ID") or "").strip()
 
@@ -176,24 +151,25 @@ def clean_row(row: dict) -> tuple[dict | None, list[Issue], str | None]:
 
 
 def load_dimension(cur, table: str, id_col: str, name_col: str, values: set[str]) -> dict[str, int]:
-    """Insert distinct values into a dimension, return {name: surrogate_id}.
-
-    ON CONFLICT DO NOTHING makes this safe to re-run. The surrogate key (a
-    SERIAL) is what the fact table stores, not the text -- so renaming a
-    manufacturer later touches one dimension row, not 19,000 fact rows.
-    """
+    # Returns {name: surrogate_id}. The fact table stores the key, not the
+    # text, so renaming a manufacturer touches one row rather than 19,000.
     cleaned = sorted(v for v in values if v)
+    # cast: psycopg types execute() to LiteralString so runtime-built SQL is
+    # flagged. Table and column names here are module constants, never user
+    # input -- values always travel as bound parameters.
     cur.executemany(
-        f"INSERT INTO {table} ({name_col}) VALUES (%s) ON CONFLICT ({name_col}) DO NOTHING",
+        cast(LiteralString,
+             f"INSERT INTO {table} ({name_col}) VALUES (%s) "
+             f"ON CONFLICT ({name_col}) DO NOTHING"),
         [(v,) for v in cleaned],
     )
-    cur.execute(f"SELECT {name_col}, {id_col} FROM {table}")
-    return {name: key for name, key in cur.fetchall()}
+    cur.execute(cast(LiteralString, f"SELECT {name_col}, {id_col} FROM {table}"))
+    return dict(cur.fetchall())
 
 
-def load_models(cur, pairs: set[tuple[str, str]], manufacturer_ids: dict[str, int]) -> dict[tuple[str, str], int]:
-    """dim_model is keyed on (manufacturer, model): 'Civic' only means
-    something under Honda, so the model name alone is not a natural key."""
+def load_models(cur, pairs: set[tuple[str, str]],
+                manufacturer_ids: dict[str, int]) -> dict[tuple[str, str], int]:
+    # Keyed on (manufacturer, model): 'Civic' only means something under Honda.
     payload = [(manufacturer_ids[mfr], model) for mfr, model in sorted(pairs) if mfr and model]
     cur.executemany(
         "INSERT INTO dim_model (manufacturer_id, model_name) VALUES (%s, %s) "
@@ -226,37 +202,29 @@ def main() -> int:
     rejected = 0
 
     for row in rows:
-        cleaned, issues, reject_reason = clean_row(row)
+        cleaned, issues, _reject_reason = clean_row(row)
         source_id = (row.get("ID") or "").strip()
         all_issues.extend((source_id, issue) for issue in issues)
-        if reject_reason is not None:
+        if cleaned is None:
             rejected += 1
             continue
         cleaned_rows.append(cleaned)
 
-    # -----------------------------------------------------------------------
-    # TWO CONNECTIONS, ON PURPOSE.
-    #
-    #   audit_conn : autocommit. Owns etl_load_run + etl_quarantine.
-    #   data_conn  : one transaction. Owns the star schema and the facts.
-    #
-    # The data load must be atomic -- if it fails, the previous dataset has to
-    # survive untouched, and PostgreSQL's transactional DDL gives us that for
-    # free. But an audit trail written inside that same transaction would roll
-    # back with it, so a failed run would erase its own record. The load is
-    # atomic; the audit of the load must not be.
-    # -----------------------------------------------------------------------
+    # Two connections on purpose: the load is atomic, the audit of the load
+    # must not be, or a failed run rolls back its own record. (D13)
     with psycopg.connect(dsn, autocommit=True) as audit_conn:
         with audit_conn.cursor() as acur:
-            acur.execute(SCHEMA_AUDIT_PATH.read_text(encoding="utf-8"))
+            acur.execute(cast(LiteralString, SCHEMA_AUDIT_PATH.read_text(encoding="utf-8")))
             acur.execute(
                 "INSERT INTO etl_load_run (source_file) VALUES (%s) RETURNING run_id",
                 (CSV_PATH.name,),
             )
-            run_id = acur.fetchone()[0]
+            row = acur.fetchone()
+            if row is None:
+                raise RuntimeError("INSERT ... RETURNING produced no row")
+            run_id = row[0]
 
-            # Written before the load is attempted: these are findings of the
-            # TRANSFORM, which happened regardless of whether the load lands.
+            # Findings of the transform, true whether or not the load lands
             if all_issues:
                 acur.executemany(
                     "INSERT INTO etl_quarantine "
@@ -302,19 +270,12 @@ def main() -> int:
 
 
 def _load_data(dsn: str, cleaned_rows: list[dict]) -> None:
-    """Rebuild the star schema and load the facts, as ONE transaction.
-
-    psycopg's connection context manager commits on clean exit and rolls back
-    if an exception escapes. Because PostgreSQL DDL is transactional, that
-    rollback undoes the DROP/CREATE as well -- so a failure here leaves the
-    previous schema and data completely intact. An atomic swap.
-
-    (Oracle behaves differently: DDL there issues an implicit commit, so the
-    same code would strand you with half-built tables.)
-    """
+    # One transaction. PostgreSQL DDL is transactional, so a failure rolls
+    # back the DROP/CREATE too and the previous data survives -- an atomic
+    # swap. Oracle would differ: DDL there issues an implicit commit. (D13)
     with psycopg.connect(dsn) as conn:
         with conn.cursor() as cur:
-            cur.execute(SCHEMA_STAR_PATH.read_text(encoding="utf-8"))
+            cur.execute(cast(LiteralString, SCHEMA_STAR_PATH.read_text(encoding="utf-8")))
 
             manufacturer_ids = load_dimension(
                 cur, "dim_manufacturer", "manufacturer_id", "manufacturer_name",
@@ -332,10 +293,10 @@ def _load_data(dsn: str, cleaned_rows: list[dict]) -> None:
                 cur, {(r["manufacturer"], r["model"]) for r in cleaned_rows}, manufacturer_ids
             )
 
-            # Bulk load. COPY streams rows in one pass instead of issuing 19,000
-            # INSERTs -- the single biggest performance decision in this script.
+            # COPY streams in one pass instead of 19,000 INSERTs
             columns = ", ".join(FACT_COLUMNS)
-            with cur.copy(f"COPY fact_car_listing ({columns}) FROM STDIN") as copy:
+            copy_sql = cast(LiteralString, f"COPY fact_car_listing ({columns}) FROM STDIN")
+            with cur.copy(copy_sql) as copy:
                 for r in cleaned_rows:
                     copy.write_row((
                         r["listing_id"],
@@ -349,19 +310,13 @@ def _load_data(dsn: str, cleaned_rows: list[dict]) -> None:
                         r["airbags"], r["has_leather"], r["price_suspect"], r["mileage_suspect"],
                     ))
 
-            # Indexes AFTER the data, never before. With them in place during
-            # the COPY every row is inserted into each B-tree individually;
-            # built afterwards, PostgreSQL sorts all values in bulk and
-            # constructs the tree in one pass. (The PRIMARY KEY is exempt -- it
-            # is a correctness constraint, not a performance index.)
-            cur.execute(INDEXES_PATH.read_text(encoding="utf-8"))
+            # Indexes after the data: bulk build beats per-row maintenance.
+            # The PK is exempt -- it is a constraint, not a perf index. (D18)
+            cur.execute(cast(LiteralString, INDEXES_PATH.read_text(encoding="utf-8")))
 
-            # Refresh the planner's statistics. The table was dropped and
-            # recreated moments ago, so it currently has NONE: pg_class.reltuples
-            # reads -1, meaning "unknown", and the planner is guessing. Measured
-            # on this data, it estimated 53 rows for a filter that matches 205.
-            # Autovacuum would fix this eventually, but the dashboard queries
-            # immediately -- so we do it deterministically, as the last step.
+            # The table was recreated moments ago and has no statistics
+            # (reltuples = -1), so the planner guesses. Autovacuum is too late:
+            # the dashboard queries immediately. (D18)
             cur.execute("ANALYZE fact_car_listing")
             cur.execute("ANALYZE dim_manufacturer")
             cur.execute("ANALYZE dim_model")
@@ -373,12 +328,8 @@ def _load_data(dsn: str, cleaned_rows: list[dict]) -> None:
 
 def _print_reconciliation(run_id, rows_read, duplicates, rejected, loaded,
                           repairs, breakdown, elapsed) -> None:
-    """Rows in, rows out, and every value we touched.
-
-    The balance check is the important line: read - duplicates - rejected must
-    equal loaded. If it does not, something was lost silently, which is the
-    failure mode a load log exists to catch.
-    """
+    # Balance check is the line that matters: read - duplicates - rejected
+    # must equal loaded, or something was lost silently.
     print(f"\n{'=' * 62}\n RECONCILIATION — run #{run_id}\n{'=' * 62}")
     print(f"  rows read from source      {rows_read:>8,}")
     print(f"  exact duplicates dropped   {duplicates:>8,}")

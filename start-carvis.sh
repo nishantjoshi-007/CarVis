@@ -8,10 +8,9 @@
 #   ./start-carvis.sh --port 8080  serve on a different port
 #   ./start-carvis.sh --stop       stop the database container and exit
 #
-# DESIGN NOTE — this script CHECKS prerequisites, it never installs them.
-# Auto-installing Docker or Python would need sudo, differ per distro, and can
-# leave a contributor's machine in a state they did not ask for. Every failure
-# below exits with the exact command or link needed to fix it.
+# Checks prerequisites, never installs them: auto-installing Docker or Python
+# needs sudo and changes a machine its owner did not ask to have changed. Every
+# failure below exits with the command needed to fix it. (decision.md D17)
 
 set -euo pipefail
 
@@ -117,9 +116,7 @@ If you get a permission error, add yourself to the docker group:
         ok "created container '$CONTAINER' (data persists in volume '$VOLUME')"
     fi
 
-    # Poll for readiness rather than sleeping a fixed number of seconds: the
-    # container reports listening before the server can actually accept queries,
-    # and a fixed sleep is either too short on a cold start or wasted time.
+    # Poll, not sleep: the container listens before it can answer queries
     printf '    waiting for postgres '
     for i in $(seq 1 60); do
         if docker exec "$CONTAINER" pg_isready -U "$PG_USER" -d "$PG_DB" >/dev/null 2>&1; then
@@ -148,7 +145,7 @@ If you get a permission error, add yourself to the docker group:
         ok "$(printf "%'d" "$ROWS") rows already loaded  ${DIM}(--reload to rebuild)${RESET}"
     fi
 
-    # Price model: regenerable output, so it is not committed. Train on demand.
+    # Regenerable output, so it is not committed
     if (( FORCE_RELOAD )) || [[ ! -f "$PROJECT_ROOT/ml/price_model.joblib" ]]; then
         step "Training the price model"
         DATABASE_URL="$DATABASE_URL" "$PY" -m ml.price_model || warn \

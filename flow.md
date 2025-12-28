@@ -13,11 +13,13 @@ Reasoning behind these choices lives in [`decision.md`](decision.md).
 CarVis/
 ├── app.py                 ← ENTRY POINT 1: the Dash web app (callbacks only)
 ├── src/
-│   ├── db.py              connection pool + fetch_df(); decides db-vs-CSV
-│   ├── queries.py         every question the dashboard asks; SQL + CSV fallback
-│   ├── layout.py          page layout; builds the control panel + chart slots
-│   ├── slider.py          production-year range slider
-│   └── checklist.py       fuel-type checklist
+│   ├── data/
+│   │   ├── db.py          connection pool + fetch_df(); decides db-vs-CSV
+│   │   └── queries.py     every question the dashboard asks; SQL + CSV fallback
+│   └── ui/
+│       ├── layout.py      page layout; builds the control panel + chart slots
+│       ├── slider.py      production-year range slider
+│       └── checklist.py   fuel-type checklist
 ├── data/
 │   └── car_price_prediction.csv    source data, 19,237 rows, 18 columns
 ├── db/
@@ -42,10 +44,9 @@ CarVis/
 └── flow.md                this file
 ```
 
-**Original coursework:** `app.py` (callbacks), `src/layout.py`, `src/slider.py`,
-`src/checklist.py`, `data/`.
-**New database layer:** `db/`, `etl/`, `src/db.py`, `src/queries.py`, `tests/`,
-`benchmark.py`, `start-carvis.sh`.
+**Original coursework:** `app.py` (callbacks), `src/ui/`, `data/`.
+**New:** `db/`, `etl/`, `ml/`, `src/data/`, `tests/`, `benchmark.py`,
+`start-carvis.sh`.
 
 ---
 
@@ -75,7 +76,9 @@ user changes any filter
        ├─ update_pie_chart()     ──► queries.count_by_manufacturer()     [aggregated in SQL]
        ├─ update_bar_chart()     ──► queries.avg_price_by_category()     [aggregated in SQL]
        ├─ update_box_plot()      ──► queries.price_by_manufacturer()
-       └─ update_histogram()     ──► queries.mileage_distribution()
+       ├─ update_histogram()     ──► queries.mileage_distribution()
+       └─ update_prediction_plot() ──► queries.price_prediction_frame()
+                                      + ml.price_model.predict()
                                           each one ▼
                                      db.is_available()?
                                        ├─ yes ─► db.fetch_df(sql, params)

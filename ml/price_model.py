@@ -10,6 +10,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from typing import LiteralString, cast
 
 import joblib
 import numpy as np
@@ -75,11 +76,14 @@ def build_pipeline(model):
 
 
 def load_training_data(dsn: str) -> pd.DataFrame:
-    with psycopg.connect(dsn) as conn:
-        with conn.cursor() as cur:
-            cur.execute(TRAINING_QUERY)
-            rows = cur.fetchall()
-            cols = [d.name for d in cur.description]
+    with psycopg.connect(dsn) as conn, conn.cursor() as cur:
+        # cast: TRAINING_QUERY is an f-string built from the feature lists above,
+        # so it is str rather than LiteralString. No user input reaches it.
+        cur.execute(cast(LiteralString, TRAINING_QUERY))
+        rows = cur.fetchall()
+        if cur.description is None:
+            raise RuntimeError("training query returned no result set")
+        cols = [d.name for d in cur.description]
     df = pd.DataFrame(rows, columns=cols)
     for col in BOOLEAN_FEATURES:
         df[col] = df[col].astype(float)

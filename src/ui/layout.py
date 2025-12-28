@@ -1,9 +1,15 @@
-from dash import html, dcc
-from src import slider, checklist
+# Page layout: the control panel and the chart slots. The ids set here are
+# what app.py's callbacks bind to, so renaming one breaks its callback.
 
-def create_layout(manufacturers, min_year, max_year, fuel_types, all_models, multi_manufacturer=True):
+from dash import dcc, html
+
+from src.ui import checklist, slider
+
+
+def create_layout(manufacturers, min_year, max_year, fuel_types, all_models,
+                  multi_manufacturer=True):
     return html.Div(children=[
-        html.H1('CarVis: A Dashboard for Car Decisions-Making',),
+        html.H1('CarVis: A Dashboard for Car Decisions-Making'),
 
         # Manufacturer and Model Name Dropdowns
         html.Div(children=[
@@ -11,7 +17,7 @@ def create_layout(manufacturers, min_year, max_year, fuel_types, all_models, mul
                 html.Label('Select Manufacturer:'),
                 dcc.Dropdown(
                     id='manufacturer-dropdown',
-                    options=[{'label': manufacturer, 'value': manufacturer} for manufacturer in manufacturers],
+                    options=[{'label': m, 'value': m} for m in manufacturers],
                     multi=True,
                     placeholder="Select Manufacturers"
                     )
@@ -20,7 +26,7 @@ def create_layout(manufacturers, min_year, max_year, fuel_types, all_models, mul
                 html.Label('Filter by Model Name:'),
                 dcc.Dropdown(
                     id='model-name-dropdown',
-                    options=[{'label': model, 'value': model} for model in all_models],
+                    options=[{'label': m, 'value': m} for m in all_models],
                     placeholder="Enter Model Name",
                     multi=True,
                     search_value='',
@@ -33,37 +39,39 @@ def create_layout(manufacturers, min_year, max_year, fuel_types, all_models, mul
         # Production Year Range Slider
         html.Div(children=[
             html.Label('Select Production Year Range:'),
-            slider.create_slider('prod-year-slider', 'Prod. year', min_year, max_year)
+            slider.create_slider('prod-year-slider', 'Prod. year',
+                                 min_year, max_year)
         ], style={'width': '100%', 'padding': '20px 0'}),
-        
+
         # Fuel Type Checklist
         html.Div(children=[
             html.Div(children=[
-                checklist.create_checklist('fuel-type-checklist', fuel_types, label="Select Fuel Types:")
+                checklist.create_checklist('fuel-type-checklist', fuel_types,
+                                           label="Select Fuel Types:")
             ], style={'width': '48%', 'display': 'inline-block'}),
         ]),
-        
-        # Container for Histogram and Scatter Plot
+
+        # Row 1: histogram + scatter
         html.Div(children=[
             html.Div(
                 dcc.Graph(id='histogram'),
-                style={'width': '50%', 'display': 'inline-block'}  # Adjust width as needed
+                style={'width': '50%', 'display': 'inline-block'}
             ),
             html.Div(
                 dcc.Graph(id='scatter-plot'),
-                style={'width': '50%', 'display': 'inline-block'}  # Adjust width as needed
+                style={'width': '50%', 'display': 'inline-block'}
             )
         ], style={'width': '100%', 'display': 'flex', 'justify-content': 'center'}),
 
-        # Container for Box Plot and Bar Chart
+        # Row 2: box plot + bar chart
         html.Div(children=[
             html.Div(
                 dcc.Graph(id='box-plot'),
-                style={'width': '50%', 'display': 'inline-block'}  # Adjust width as needed
+                style={'width': '50%', 'display': 'inline-block'}
             ),
             html.Div(
                 dcc.Graph(id='bar-chart'),
-                style={'width': '50%', 'display': 'inline-block'}  # Adjust width as needed
+                style={'width': '50%', 'display': 'inline-block'}
             )
         ], style={'width': '100%', 'display': 'flex', 'justify-content': 'center'}),
 
@@ -76,6 +84,6 @@ def create_layout(manufacturers, min_year, max_year, fuel_types, all_models, mul
         # Pie Chart
         html.Div(
             dcc.Graph(id='pie-chart'),
-            style={'width': '50%', 'margin': 'auto', 'display': 'block'}  # Adjust width as needed, centered
+            style={'width': '50%', 'margin': 'auto', 'display': 'block'}
         )
     ])

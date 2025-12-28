@@ -1,38 +1,21 @@
-"""
-Every question the dashboard asks of the data, in one place.
-
-TWO PATHS, ONE INTERFACE
-------------------------
-Each public function returns the DataFrame its chart needs. If a database is
-configured and reachable it runs SQL; otherwise it falls back to the original
-pandas-over-CSV logic. The callbacks in app.py do not know or care which
-happened.
-
-WHAT IS PUSHED DOWN AND WHAT IS NOT
------------------------------------
-Aggregate charts (pie, bar) are computed in the database and return one row per
-category -- 11 rows instead of 18,924. Distribution charts (scatter, box,
-histogram) genuinely need row-level data to plot, so they cannot be aggregated
-away; those return rows, and the win there is the WHERE clause filtering
-server-side rather than in Python.
-
-That distinction is the honest version of "push computation to the data": push
-what the visualisation lets you push, and be clear about what it does not.
-"""
+# Every question the dashboard asks of the data.
+#
+# Each function returns the DataFrame its chart needs, from SQL when a database
+# is reachable and from the CSV when it is not. Aggregate charts are computed
+# in the database; distribution charts need row-level data and cannot be.
+# (decision.md D6, D16)
 
 from __future__ import annotations
 
 import pandas as pd
 
-from src import db
+from src.data import db
 
 CSV_PATH = "./data/car_price_prediction.csv"
 
 # --- SQL building blocks ----------------------------------------------------
 
-# Joining the four dimensions back to readable names. The dashboard's controls
-# work in names ("LEXUS"), the fact table stores surrogate keys (17) -- this is
-# where the star schema is actually paid for.
+# The controls work in names, the fact table stores surrogate keys
 _JOINS = """
     FROM fact_car_listing l
     JOIN dim_manufacturer mf ON mf.manufacturer_id = l.manufacturer_id
@@ -41,22 +24,13 @@ _JOINS = """
     JOIN dim_fuel_type    ft ON ft.fuel_type_id    = l.fuel_type_id
 """
 
-# The mileage outlier fence, expressed in SQL.
-#
-# The original pandas code computed an IQR fence on the FILTERED subset and
-# dropped anything outside it. percentile_cont is the SQL equivalent, and it is
-# recomputed per query for the same reason: the fence should describe the cars
-# you are currently looking at, not the whole table.
-#
-# One deliberate difference: rows whose mileage is NULL are KEPT. Post-cleaning,
-# NULL means "unknown mileage", and such a car still has a valid price, year and
-# category that the price charts should count. The original data had no NULLs --
-# those rows carried 0 or the INT_MAX sentinel and were silently discarded by
-# the fence.
+# Mileage IQR fence in SQL, recomputed per query so it describes the cars
+# currently in view. NULL mileage is kept: the car still has a valid price and
+# category the charts should count. (D16)
 _BASE_CTE = """
 WITH base AS (
-    -- price cast to float8 here rather than at each call site: NUMERIC comes
-    -- back as Decimal, which Plotly will not chart.
+    -- float8 here, not per call site: NUMERIC returns Decimal, which Plotly
+    -- will not chart.
     SELECT l.listing_id, l.price_usd::float8 AS price_usd, l.mileage_km, l.prod_year,
            l.engine_volume_l::float8 AS engine_volume_l, l.cylinders, l.airbags,
            l.is_turbo, l.has_leather, l.doors, l.gearbox_type, l.drive_wheels,
@@ -83,12 +57,8 @@ filtered AS (
 
 
 def _build_filters(manufacturers, years, models, fuel_types) -> tuple[str, dict]:
-    """Turn the dashboard's control state into a WHERE clause plus parameters.
-
-    Values are collected into a dict and bound by the driver. `= ANY(%(x)s)`
-    takes a Python list directly, which avoids hand-assembling an IN (...) list
-    -- the classic place SQL injection gets introduced.
-    """
+    # = ANY(%(x)s) takes a Python list directly, so no IN (...) is assembled
+    # by hand -- the classic place injection gets introduced.
     clauses: list[str] = ["TRUE"]
     params: dict = {}
 
@@ -120,7 +90,7 @@ _csv_cache: pd.DataFrame | None = None
 
 
 def _csv_frame() -> pd.DataFrame:
-    """The pre-database code path, kept intact as a fallback (decision.md D6)."""
+    # The pre-database path, kept intact as a fallback (D6)
     global _csv_cache
     if _csv_cache is None:
         _csv_cache = pd.read_csv(CSV_PATH)
@@ -154,12 +124,8 @@ def _csv_filtered(manufacturers, years, models, fuel_types) -> pd.DataFrame:
 
 
 def get_filter_options() -> dict:
-    """The values offered by the dropdowns, sliders and checklists.
-
-    Read from the DIMENSIONS rather than from the facts. That is the point of
-    having them: the options the user is offered cannot drift out of sync with
-    the data stored, and it is four small scans instead of one big DISTINCT.
-    """
+    # Read from the dimensions, not the facts, so the options offered cannot
+    # drift out of sync with the data stored.
     if not db.is_available():
         df = _csv_frame()
         return {
@@ -191,7 +157,7 @@ def get_filter_options() -> dict:
 
 
 def scatter_mileage_price(manufacturers, years, models, fuel_types) -> pd.DataFrame:
-    """Row-level: a scatter plot needs the individual points."""
+    # Row-level: a scatter needs the individual points
     if not db.is_available():
         return _csv_filtered(manufacturers, years, models, fuel_types)[["mileage_km", "price_usd"]]
     sql, params = _sql(
@@ -202,7 +168,7 @@ def scatter_mileage_price(manufacturers, years, models, fuel_types) -> pd.DataFr
 
 
 def count_by_manufacturer(manufacturers, years, models, fuel_types) -> pd.DataFrame:
-    """AGGREGATED in the database: returns one row per manufacturer."""
+    # Aggregated in the database: one row per manufacturer
     if not db.is_available():
         df = _csv_filtered(manufacturers, years, models, fuel_types)
         return (df.groupby("manufacturer_name").size()
@@ -216,12 +182,7 @@ def count_by_manufacturer(manufacturers, years, models, fuel_types) -> pd.DataFr
 
 
 def avg_price_by_category(manufacturers, years, models, fuel_types) -> pd.DataFrame:
-    """AGGREGATED in the database: 11 rows back instead of ~18,900.
-
-    This is the clearest example of pushing computation to the data -- the
-    pandas version transferred every matching row across the wire in order to
-    compute eleven averages.
-    """
+    # Aggregated in the database: 11 rows back instead of ~18,900
     if not db.is_available():
         df = _csv_filtered(manufacturers, years, models, fuel_types)
         return (df.groupby("category_name")["price_usd"].mean()
@@ -235,7 +196,7 @@ def avg_price_by_category(manufacturers, years, models, fuel_types) -> pd.DataFr
 
 
 def price_by_manufacturer(manufacturers, years, models, fuel_types) -> pd.DataFrame:
-    """Row-level: a box plot needs the distribution, not a summary."""
+    # Row-level: a box plot needs the distribution, not a summary
     if not db.is_available():
         return _csv_filtered(manufacturers, years, models, fuel_types)[
             ["manufacturer_name", "price_usd"]]
@@ -247,7 +208,7 @@ def price_by_manufacturer(manufacturers, years, models, fuel_types) -> pd.DataFr
 
 
 def mileage_distribution(manufacturers, years, models, fuel_types) -> pd.DataFrame:
-    """Row-level: Plotly bins the histogram client-side."""
+    # Row-level: Plotly bins the histogram client-side
     if not db.is_available():
         return _csv_filtered(manufacturers, years, models, fuel_types)[["mileage_km"]]
     sql, params = _sql(

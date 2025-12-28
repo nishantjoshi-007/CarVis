@@ -1,24 +1,17 @@
-"""
-CarVis — interactive dashboard for used-car market data.
-
-Entry point. Run with:
-
-    gunicorn app:server          # production (Render, and locally)
-    python app.py                # local development
-
-Each of the five charts asks src/queries.py for exactly the data it needs.
-Those queries run against PostgreSQL when DATABASE_URL is set and the database
-answers, and fall back to reading the CSV when it is not -- so the dashboard
-stays up whatever the database is doing. See decision.md (D6) and flow.md.
-"""
+# CarVis — interactive dashboard for used-car market data.
+#
+#   gunicorn app:server    production, and locally
+#   python app.py          development
+#
+# Each chart asks src/queries.py for the data it needs. See flow.md.
 
 import dash
 import plotly.express as px
 from dash import Input, Output
 
 from ml import price_model
-from src import db, queries
-from src.layout import create_layout
+from src.data import db, queries
+from src.ui.layout import create_layout
 
 app = dash.Dash(__name__)
 server = app.server
@@ -26,13 +19,10 @@ server = app.server
 app.title = "CarVis"
 app._favicon = "icon.ico"
 
-# Read once at start-up, from the dimension tables when the database is up.
-# Note what is NOT here any more: the whole dataset. It used to be loaded into
-# a module-level DataFrame, which meant every gunicorn worker process carried
-# its own full copy in memory.
+# Read once at start-up. Note what is no longer here: the whole dataset, which
+# used to sit in a module-level DataFrame in every gunicorn worker.
 options = queries.get_filter_options()
-# flush=True: gunicorn's workers do not run on a tty, so Python block-buffers
-# stdout and this line would not appear until the buffer filled -- i.e. never.
+# flush: gunicorn workers have no tty, so stdout is block-buffered
 print(f"[carvis] data source: {'postgres' if db.is_available() else 'csv fallback'}",
       flush=True)
 
@@ -45,7 +35,7 @@ app.layout = create_layout(
     multi_manufacturer=True,
 )
 
-# All five callbacks take the same four control values.
+# Every callback takes the same four control values
 FILTER_INPUTS = [
     Input("manufacturer-dropdown", "value"),
     Input("prod-year-slider", "value"),
@@ -116,7 +106,7 @@ def update_prediction_plot(manufacturers, years, models, fuel_types):
     # A perfect model would put every point on this line.
     limit = float(max(df["price_usd"].max(), df["predicted_usd"].max()))
     fig.add_shape(type="line", x0=0, y0=0, x1=limit, y1=limit,
-                  line=dict(dash="dash", width=1))
+                  line={"dash": "dash", "width": 1})
     return fig
 
 

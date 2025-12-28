@@ -2,7 +2,10 @@
 # feature-exclusion decision so a future edit cannot quietly undo it (D20).
 import pandas as pd
 import pytest
+
 from ml import price_model as pm
+
+
 class TestNoTargetLeakage:
     def test_levy_is_not_a_feature(self):
         # Vehicle tax tracks vehicle value, so it leaks the target
@@ -38,6 +41,7 @@ class TestTrainedModel:
             "fuel_type_name": "Petrol",
         }
         out = pm.predict(pd.DataFrame([row, row]))
+        assert out is not None
         assert len(out) == 2
     def test_prediction_is_a_plausible_price(self):
         row = {
@@ -47,7 +51,9 @@ class TestTrainedModel:
             "manufacturer_name": "BMW", "category_name": "Sedan",
             "fuel_type_name": "Petrol",
         }
-        assert 500 < pm.predict(pd.DataFrame([row]))[0] < 500_000
+        out = pm.predict(pd.DataFrame([row]))
+        assert out is not None
+        assert 500 < out[0] < 500_000
     def test_missing_mileage_is_imputed_not_fatal(self):
         # 19 of 361 BMW rows have NULL mileage; the model must still score them
         row = {
@@ -57,4 +63,6 @@ class TestTrainedModel:
             "manufacturer_name": "BMW", "category_name": "Sedan",
             "fuel_type_name": "Petrol",
         }
-        assert pm.predict(pd.DataFrame([row]))[0] > 0
+        out = pm.predict(pd.DataFrame([row]))
+        assert out is not None
+        assert out[0] > 0
