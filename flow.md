@@ -40,7 +40,6 @@ CarVis/
 ├── requirements.txt       runtime dependencies
 ├── requirements-dev.txt   pytest
 ├── decision.md            why the code is the way it is
-├── quiz.md                interview prep: questions, answers, corrections
 └── flow.md                this file
 ```
 
